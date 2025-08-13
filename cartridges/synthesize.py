@@ -19,7 +19,7 @@ import wandb
 from cartridges.synthesizers.base import AsyncConvoSynthesizer
 from cartridges.structs import Conversation, write_conversations
 from cartridges.utils import get_logger
-from cartridges.utils.wandb import prepare_wandb, WandBConfig, get_default_wandb_config
+from cartridges.utils.wandb import prepare_wandb, WandBConfig
 from cartridges.utils.hf import upload_run_dir_to_hf
 
 
@@ -53,7 +53,7 @@ class SynthesizeConfig(RunConfig):
     max_num_batches_in_parallel: int
     worker_timeout: int = 6 * 60  # only allow six minutes between completed batches
 
-    # --- BEGIN CONFIGURATIONS FOR HOW TO SAVE THE GENERATED DATASET ---
+    # --- BEGIN CONFIGURATIONS FOR LOGGING AND SAVING  ---
 
     # name of the run, will be used to name the run directory where the generated dataset
     # is saved
@@ -62,7 +62,7 @@ class SynthesizeConfig(RunConfig):
     # wandb configuration, `upload_to_wandb` controls whether to upload the dataset to 
     # wandb as an artifact. `save_wandb_preview` controls whether to save a small 
     # preview of the dataset to the wandb for inspection. 
-    wandb: Optional[WandBConfig] = Field(default_factory=get_default_wandb_config)
+    wandb: Optional[WandBConfig] = Field(default_factory=WandBConfig)
     upload_to_wandb: bool = False
     save_wandb_preview: bool = True
     
@@ -76,6 +76,8 @@ class SynthesizeConfig(RunConfig):
     # this is the root directory for outputs, a subdirectory will be created for the run
     # based on "name"
     output_dir: Optional[str] = Field(default=os.environ.get("CARTRIDGES_OUTPUT_DIR", "."))
+
+    # --- END CONFIGURATIONS FOR LOGGING AND SAVING  ---
 
 
     def run(self):

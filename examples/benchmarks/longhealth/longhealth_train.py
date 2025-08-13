@@ -5,17 +5,15 @@ import socket
 import pydrantic
 from pydrantic.variables import FormatStringVariable
 
-from cartridges.initialization.random import KVFromRandomText, KVFromRandomVectors
+from cartridges.initialization import KVFromRandomText
 from cartridges.models.llama.modeling_llama import FlexLlamaForCausalLM
 from cartridges.models.qwen.modeling_qwen3 import FlexQwen3ForCausalLM
 from cartridges.train import GenerationEvalConfig, TrainConfig
 from cartridges.models.config import HFModelConfig
 from cartridges.datasets import TrainDataset
-from cartridges.utils import WandBConfig
+from cartridges.utils.wandb import WandBConfig
 from cartridges.data.longhealth.evals import LongHealthMultipleChoiceGenerateDataset
 
-file_name = Path(__file__).stem
-bs = 4
 
 NUM_PATIENTS = 10
 patient_idxs = list(range(1, NUM_PATIENTS + 1))
@@ -48,6 +46,8 @@ elif MODEL == "qwen":
     )
 else:
     raise ValueError(f"Invalid model: {MODEL}")
+
+
 config = TrainConfig(
     model=model,
     kv_cache_initializer=KVFromRandomText.Config(
@@ -59,10 +59,7 @@ config = TrainConfig(
     global_batch_size=32,
 
     dataset=TrainDataset.Config(
-        data_sources=[
-            (source, None)
-            for source in data_sources
-        ],
+        data_sources=data_sources,
         top_k_logits=20,
         packed_seq_length=2048,
         packing_mode="truncate",
@@ -81,17 +78,11 @@ config = TrainConfig(
             temperature=0.3,
         )
     ],
-    loss_eval_every_n_steps=512,
-    loss_evals=[],
     distributed_backend="gloo",
 
-    wandb=WandBConfig(
-        project="cartridges",
-        tags=["train", "longhealth"],
-        entity="hazy-research",
-    ),
-    output_dir=os.environ["CARTRIDGES_OUTPUT_DIR"],
-    name=FormatStringVariable(f"{file_name}_lr{{lr}}_toks{{kv_cache_initializer.max_tokens}}"),
+    wandb=WandBConfig(tags=["train", "longhealth"]),
+    output_dir=os.environ.get("CARTRIDGES_OUTPUT_DIR", "."),
+    name=FormatStringVariable("longhealth_train_lr{lr}_toks{kv_cache_initializer.max_tokens}"),
 )
 
 

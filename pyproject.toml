@@ -11,7 +11,7 @@ dependencies = [
     "torch",
     "openai",
     "datasets",
-    "transformers==4.49.0",
+    "transformers>=4.49.0,<=4.55",
     "numpy",
     "einops",
     "tqdm",
@@ -23,10 +23,7 @@ dependencies = [
     "markdown"
 ]
 
-[project.scripts]
-pdr = "pdr.cli:main"
-
 
 
 [tool.setuptools]
-packages = ["cartridges", "scripts"]
+packages = ["cartridges"]

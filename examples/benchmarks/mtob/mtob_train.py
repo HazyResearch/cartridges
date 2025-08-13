@@ -6,22 +6,14 @@ import pydrantic
 from pydrantic.variables import FormatStringVariable
 
 from cartridges.data.mtob.evals import MTOBKalamangToEnglishGenerateDataset
-from cartridges.initialization.random import KVFromRandomText, KVFromRandomVectors
+from cartridges.initialization import KVFromRandomText
 from cartridges.models.llama.modeling_llama import FlexLlamaForCausalLM
 from cartridges.models.qwen.modeling_qwen3 import FlexQwen3ForCausalLM
 from cartridges.train import GenerationEvalConfig, TrainConfig
 from cartridges.models.config import HFModelConfig
 from cartridges.datasets import TrainDataset
-from cartridges.utils import WandBConfig
-from cartridges.data.longhealth.evals import LongHealthMultipleChoiceGenerateDataset
+from cartridges.utils.wandb import WandBConfig
 
-file_name = Path(__file__).stem
-bs = 4
-
-NUM_PATIENTS = 10
-patient_idxs = list(range(1, NUM_PATIENTS + 1))
-patients_str = f"p{NUM_PATIENTS}"
-patient_ids = [f"patient_{idx:02d}" for idx in patient_idxs]
 
 NUM_TOKENS = int(os.environ.get("NUM_TOKENS", "8192"))
 
@@ -62,10 +54,7 @@ for lr in [2e-2]:
         global_batch_size=32,
 
         dataset=TrainDataset.Config(
-            data_sources=[
-                (source, None)
-                for source in data_sources
-            ],
+            data_sources=data_sources,
             top_k_logits=20,
             packed_seq_length=2048,
             packing_mode="truncate",
@@ -87,13 +76,9 @@ for lr in [2e-2]:
         loss_evals=[],
         distributed_backend="gloo",
 
-        wandb=WandBConfig(
-            project="capsules",
-            tags=["train", "mtob"],
-            entity="hazy-research",
-        ),
-        output_dir=os.environ["CARTRIDGES_OUTPUT_DIR"],
-        name=FormatStringVariable(f"{file_name}_lr{{lr}}_toks{{kv_cache_initializer.max_tokens}}"),
+        wandb=WandBConfig(tags=["train", "mtob"]),
+        output_dir=os.environ.get("CARTRIDGES_OUTPUT_DIR", "."),
+        name=FormatStringVariable("mtob_train_lr{lr}_toks{kv_cache_initializer.max_tokens}"),
     )
     configs.append(config)
 

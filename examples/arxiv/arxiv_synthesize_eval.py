@@ -8,8 +8,7 @@ from cartridges.data.chunkers import TokenChunker
 from cartridges.data.resources import TextFileResource
 from cartridges.synthesize import SynthesizeConfig
 from cartridges.synthesizers.self_study import SelfStudySynthesizer
-from cartridges.utils import WandBConfig
-from cartridges.data.resources import TextFileResource
+from cartridges.utils.wandb import WandBConfig
 from cartridges.clients.openai import OpenAIClient
 
 client = OpenAIClient.Config(

@@ -24,25 +24,12 @@ if TYPE_CHECKING:
 
 
 class WandBConfig(BaseConfig):
-    project: str = "cartridges"
-    entity: Optional[str] = None
+    project: str = os.environ.get("CARTRIDGES_WANDB_PROJECT", "cartridges")
+    entity: Optional[str] = os.environ.get("CARTRIDGES_WANDB_ENTITY", None)
     name: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     notes: Optional[str] = None
     group: Optional[str] = None
-
-
-def get_default_wandb_config() -> Optional["WandBConfig"]:
-    """Get default WandB config from environment variables if they are set."""
-    project = os.environ.get("CARTRIDGES_WANDB_PROJECT")
-    entity = os.environ.get("CARTRIDGES_WANDB_ENTITY")
-    
-    if project or entity:
-        return WandBConfig(
-            project=project or "cartridges",
-            entity=entity
-        )
-    return None
 
 
 def prepare_wandb(

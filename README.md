@@ -158,13 +158,16 @@ modal deploy infra/modal_deploy_tksrs.py
 
 Then configure with the modal URL:
 ```python
-from cartridges.clients.tokasaurus_batch import TokasaurusBatchClient
+from cartridges.clients.tokasaurus import TokasaurusClient
 
-client_config = TokasaurusBatchClient.Config(
+client_config = TokasaurusClient.Config(
     url="https://your-modal-deployment-url.modal.run",
-    model_name="meta-llama/Llama-3.2-3B-Instruct"
+    model_name="Qwen/Qwen3-4b"
 )
 ```
+
+> **Note:** Make sure to tune the `ALLOW_CONCURRENT_INPUTS` (which controls the number of concurrent requests each container can handle) parameter in the `deploy` modal script in conjunction with the `batch_size` configuration field. Each batch corresponds to a single request so if `batch_size=32` and `ALLOW_CONCURRENT_INPUTS=8`, then each container will be processing 256 conversations in parallel. As a (very rough) rule of thumb, you want to aim to have about 128 - 256 conversations running concurrently per container to maximize utilization. The exact number will depend on the amount of prefix-sharing etc. 
+> Also, make sure to tune the `MIN_CONTAINERS` and `MAX_CONTAINER` parameters in the `deploy` modal script in conjunction with the `max_num_batches_in_parallel` configuration field. This will control how much the service will scale out horizontally. The more batches in parallel, the more containers will be spun up -- up to the `MAX_CONTAINER` limit.
 ---
 </details>
 
@@ -180,24 +183,26 @@ If you have access to GPUs, you can run also run a local Tokasaurus server:
 ```bash
 git clone https://github.com/ScalingIntelligence/tokasaurus
 cd tokasaurus
-git checkout --track origin/add-top-logprobs
 uv pip install -e .
 ```
 
 2. Start the server:
 ```bash
-tksrs model=meta-llama/Llama-3.2-3B-Instruct kv_cache_num_tokens='(512 * 1024)' max_top_logprobs=5
+tksrs model=Qwen3/Qwen3-4b kv_cache_num_tokens='(512 * 1024)' max_top_logprobs=20 dp_size=1
 ```
+
 
 3. Configure your client:
 ```python
-from cartridges.clients.tokasaurus_batch import TokasaurusBatchClient
+from cartridges.clients.tokasaurus import TokasaurusClient
 
-client_config = TokasaurusBatchClient.Config(
-    port=8001,  # Default Tokasaurus port
-    model_name="meta-llama/Llama-3.2-3B-Instruct"
+client_config = TokasaurusClient.Config(
+    url="http://localhost:8001",  # Make sure to use the port from the output of tksrs
+    model_name="Qwen/Qwen3-4b" 
 )
 ```
+
+> **Note:** If you want to use data parallel, update the `dp_size` parameter and make sure you set the `max_num_batches_in_parallel` configuration field to aim for about 128 - 256 conversations running concurrently per data-parallel worker. 
 </details>
 
 <details>
@@ -218,7 +223,7 @@ from cartridges.clients.sglang import SGLangClient
 
 client_config = SGLangClient.Config(
     url="https://your-modal-deployment-url.modal.run",
-    model_name="meta-llama/Llama-3.2-3B-Instruct"
+    model_name="Qwen/Qwen3-4b"
 )
 ```
 </details>
@@ -234,7 +239,7 @@ Option D: Local deployment (SGLang)
 from cartridges.clients.sglang import SGLangClient
 
 client_config = SGLangClient.Config(
-    model_name="meta-llama/Llama-3.2-3B-Instruct",
+    model_name="Qwen/Qwen3-4b",
     url="http://localhost:8000",
 )
 ```
@@ -400,7 +405,7 @@ python -m cartridges.utils.chat <wandb_run_id>
 wandb: Run data is saved locally in /tmp/wandb/run-20241201_123456-abc1def2
 wandb: Synced 5 files to https://wandb.ai/your-entity/cartridges/runs/abc1def2
 ```
-The run ID is the final part (`abc1def2`), or use the full path format: `your-entity/your-project/abc1def2`
+The run ID is in the full path format: `your-entity/your-project/abc1def2`
 You can also find the run ID in the "Overview" tab of the WandB UI under "Run path". 
 
 

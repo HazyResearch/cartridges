@@ -1,16 +1,14 @@
-import os
 from pathlib import Path
 
 import pydrantic
 
 from cartridges.clients.openai import CartridgeConfig, OpenAIClient
-from cartridges.clients.tokasaurus import TokasaurusClient
 from cartridges.data.longhealth.resources import LongHealthResource
 from cartridges.evaluate import ICLBaseline, EvaluateConfig
 from cartridges.data.longhealth.evals import LongHealthMultipleChoiceGenerateDataset
 from cartridges.evaluate import GenerationEvalConfig
 
-from cartridges.utils import WandBConfig
+from cartridges.utils.wandb import WandBConfig
 
 client = OpenAIClient.Config(
     base_url="https://hazyresearch--vllm-qwen3-4b-1xh100-serve.modal.run/v1",
@@ -26,8 +24,6 @@ client = OpenAIClient.Config(
         force_redownload=False
     )]
 )
-
-file_name = Path(__file__).stem
 
 SYSTEM_PROMPT_TEMPLATE = f"""Please reference the patient medical records included below to answer the user's questions.
 
@@ -46,7 +42,7 @@ patient_ids = [f"patient_{idx:02d}" for idx in patient_idxs]
 
 configs = [
     EvaluateConfig(
-        name=f"{file_name}_{patients_str}",
+        name=f"longhealth_mc_{patients_str}",
         generator=ICLBaseline.Config(
             client=client,
             system_prompt_template=SYSTEM_PROMPT_TEMPLATE,
@@ -68,11 +64,8 @@ configs = [
         max_num_batches_in_parallel=32,
         batch_size=32,
         wandb=WandBConfig(
-            project="cartridges",
             tags=[f"longhealth", "genbaseline", f"patients_{patients_str}", "icl"],
-            entity="hazy-research",
         ),
-        output_dir=os.environ["CAPSULES_OUTPUT_DIR"],
     )
 ]
 

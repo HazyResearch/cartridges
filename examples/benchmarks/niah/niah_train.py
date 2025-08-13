@@ -6,22 +6,12 @@ import pydrantic
 from pydrantic.variables import FormatStringVariable
 
 from cartridges.data.ruler.evals import NIAHGenerateDataset
-from cartridges.initialization.random import KVFromRandomText, KVFromRandomVectors
+from cartridges.initialization import KVFromRandomText
 from cartridges.models.llama.modeling_llama import FlexLlamaForCausalLM
-from cartridges.models.qwen.modeling_qwen3 import FlexQwen3ForCausalLM
 from cartridges.train import GenerationEvalConfig, TrainConfig
 from cartridges.models.config import HFModelConfig
 from cartridges.datasets import TrainDataset
-from cartridges.utils import WandBConfig
-from cartridges.data.longhealth.evals import LongHealthMultipleChoiceGenerateDataset
-
-file_name = Path(__file__).stem
-bs = 4
-
-NUM_PATIENTS = 10
-patient_idxs = list(range(1, NUM_PATIENTS + 1))
-patients_str = f"p{NUM_PATIENTS}"
-patient_ids = [f"patient_{idx:02d}" for idx in patient_idxs]
+from cartridges.utils.wandb import WandBConfig
 
 NUM_TOKENS = int(os.environ.get("NUM_TOKENS", "1024"))
 
@@ -70,9 +60,7 @@ niah_path = NUM_KEYS_TO_PATH[NUM_KEYS]
 
 config = TrainConfig(
     model=model,
-    kv_cache_initializer=KVFromRandomText.Config(
-        max_tokens=NUM_TOKENS
-    ),
+    kv_cache_initializer=KVFromRandomText.Config(max_tokens=NUM_TOKENS),
     
     lr=2e-2,
     loss_type="logits",
@@ -80,10 +68,7 @@ config = TrainConfig(
     global_batch_size=32,
 
     dataset=TrainDataset.Config(
-        data_sources=[
-            (source, None)
-            for source in data_sources
-        ],
+        data_sources=data_sources,
         top_k_logits=20,
         packed_seq_length=2048,
         packing_mode="truncate",
@@ -109,13 +94,9 @@ config = TrainConfig(
     loss_evals=[],
     distributed_backend="gloo",
 
-    wandb=WandBConfig(
-        project="cartridges",
-        tags=["train", "niah", num_keys_str],
-        entity="hazy-research",
-    ),
-    output_dir=os.environ["CARTRIDGES_OUTPUT_DIR"],
-    name=FormatStringVariable(f"{file_name}_lr{{lr}}_toks{{kv_cache_initializer.max_tokens}}_{num_keys_str}"),
+    wandb=WandBConfig(tags=["train", "niah", num_keys_str]),
+    output_dir=os.environ.get("CARTRIDGES_OUTPUT_DIR", "."),
+    name=FormatStringVariable("niah_train_lr{lr}_toks{kv_cache_initializer.max_tokens}_{num_keys_str}"),
 )
 
 

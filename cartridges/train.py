@@ -37,7 +37,7 @@ from cartridges.datasets import (
 )
 from cartridges.models.config import ModelConfig
 from cartridges.utils import get_logger, seed_everything
-from cartridges.utils.wandb import download_artifacts, WandBConfig, get_default_wandb_config, prepare_wandb
+from cartridges.utils.wandb import download_artifacts, WandBConfig, prepare_wandb
 
 
 logger = get_logger(__name__)
@@ -62,9 +62,10 @@ class GenerationEvalConfig(BaseConfig):
 
 class TrainConfig(RunConfig):
     name: str = "default"  # A name for the run for wandb
-    output_dir: str = os.environ["CARTRIDGES_OUTPUT_DIR"]
+    output_dir: str = os.environ.get("CARTRIDGES_OUTPUT_DIR", ".")
+
     model: ModelConfig
-    wandb: Optional[WandBConfig] = Field(default_factory=get_default_wandb_config)
+    wandb: Optional[WandBConfig] = Field(default_factory=WandBConfig)
     dataset: TrainDataset.Config
 
     # datasets for evaluating perplexity on other generations

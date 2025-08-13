@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import asyncio
 import itertools
 import math
+import os
 import time
 from typing import Callable, Dict, List, Literal, Optional, Union
 
@@ -16,12 +17,11 @@ import pydrantic
 
 from cartridges.data.resources import Resource
 from cartridges.datasets import GenerateEvalDatasetElement, GenerateEvalDataset
-from cartridges.clients.base import Client, ClientConfig, ClientResponse
+from cartridges.clients.base import ClientConfig, ClientResponse
 
 from cartridges.train import GenerationEvalConfig
-from cartridges.utils import WandBConfig, prepare_wandb, seed_everything, get_logger
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
+from cartridges.utils.wandb import WandBConfig, prepare_wandb, seed_everything, get_logger
+
 
 
 logger = get_logger(__name__)
@@ -43,6 +43,8 @@ class EvaluateConfig(pydrantic.RunConfig):
     device: str = "cuda"
 
     seed: int = 42
+
+    output_dir: str = os.environ.get("CARTRIDGES_OUTPUT_DIR", ".")
 
     def run(self):
         return asyncio.run(evaluate_generation(self))
