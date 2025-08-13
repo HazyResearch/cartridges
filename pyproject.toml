@@ -26,7 +26,5 @@ dependencies = [
 [project.scripts]
 pdr = "pdr.cli:main"
 
-
-
 [tool.setuptools]
-packages = ["cartridges", "scripts"]
+packages = ["cartridges", "examples"]
