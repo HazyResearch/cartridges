@@ -23,7 +23,8 @@ dependencies = [
     "markdown"
 ]
 
-
+[project.scripts]
+pdr = "pdr.cli:main"
 
 [tool.setuptools]
-packages = ["cartridges"]
+packages = ["cartridges", "examples"]
