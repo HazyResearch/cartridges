@@ -190,7 +190,7 @@ uv pip install -e .
 
 2. Start the server:
 ```bash
-tksrs model=Qwen3/Qwen3-4b kv_cache_num_tokens='(512 * 1024)' max_top_logprobs=20 dp_size=1
+tksrs model=Qwen/Qwen3-4b kv_cache_num_tokens='(512 * 1024)' max_top_logprobs=20 dp_size=1
 ```
 
 
