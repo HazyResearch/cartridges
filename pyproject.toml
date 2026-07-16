@@ -11,7 +11,7 @@ dependencies = [
     "torch",
     "openai",
     "datasets",
-    "transformers>=4.49.0,<=4.55",
+    "transformers>=5.3.0,<6",
     "numpy",
     "einops",
     "tqdm",
@@ -21,7 +21,8 @@ dependencies = [
     "peft",
     "evaluate",
     "matplotlib",
-    "markdown"
+    "markdown",
+    "sglang>=0.5.10",
 ]
 
 [project.scripts]
