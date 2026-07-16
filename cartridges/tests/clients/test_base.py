@@ -121,6 +121,24 @@ class TestTopLogprobsFlattenReconstruct:
         # Higher thresholds should keep more data
         assert len(flat_50.logprobs) <= len(flat_90.logprobs) <= len(flat_99.logprobs)
 
+    def test_flatten_keeps_all_entries_when_topk_mass_is_incomplete(self):
+        """A truncated top-k row may not contain the requested probability mass."""
+        logprobs = np.log(np.array([
+            [0.30, 0.20, 0.10],
+            [0.50, 0.25, 0.20],
+        ]))
+        token_ids = np.array([
+            [10, 20, 30],
+            [40, 50, 60],
+        ])
+
+        flat = TopLogprobs(logprobs=logprobs, token_ids=token_ids).flatten(
+            threshold=0.99
+        )
+
+        np.testing.assert_array_equal(flat.token_id, token_ids.ravel())
+        np.testing.assert_array_equal(flat.token_idx, [0, 0, 0, 1, 1, 1])
+
     def test_flatten_validation_errors(self):
         """Test that flatten raises appropriate validation errors."""
         logprobs = np.array([[-0.1, -0.5], [-0.2, -0.3]])

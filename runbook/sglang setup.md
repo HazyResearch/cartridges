@@ -145,6 +145,41 @@ Optional speculative decoding can be added after the baseline server works:
   --speculative-num-draft-tokens 4
 ```
 
+Do not enable speculative decoding for teacher rollouts until the deployed
+SGLang version has been checked for top-k logprob parity with the
+non-speculative path. Exact per-token distributions matter more than decode
+throughput for these runs.
+
+### GLM and Kimi launch profiles
+
+The reasoning and tool parsers are server concerns. They are useful for
+OpenAI-compatible requests, but do not change the client capability profile:
+
+```bash
+# GLM-4.5 / GLM-4.6 (GLM-4.7 uses --tool-call-parser glm47)
+sglang serve \
+  --model-path zai-org/GLM-4.6-FP8 \
+  --tp-size 8 \
+  --reasoning-parser glm45 \
+  --tool-call-parser glm45 \
+  --host 0.0.0.0 \
+  --port 30000
+
+# Kimi K2 Thinking
+sglang serve \
+  --model-path moonshotai/Kimi-K2-Thinking \
+  --tp-size 8 \
+  --trust-remote-code \
+  --reasoning-parser kimi_k2 \
+  --tool-call-parser kimi_k2 \
+  --host 0.0.0.0 \
+  --port 30000
+```
+
+Qwen3/Qwen3.5/Qwen3.6 uses `--reasoning-parser qwen3`; choose the
+checkpoint-specific tool parser supported by the installed SGLang release.
+Tool-free synthesis does not require a tool parser.
+
 ## 5. Test the server
 
 Run these commands from the compute-node shell:
@@ -164,6 +199,87 @@ curl http://127.0.0.1:30000/v1/chat/completions \
     "max_tokens": 128
   }'
 ```
+
+### Verify native token-aligned top-k output
+
+Teacher rollouts use `/generate`, which bypasses the OpenAI reasoning parser.
+Raw think delimiters therefore remain in `text`; this is intentional because
+the output must stay aligned to the generated token IDs.
+
+```bash
+python - <<'PY'
+import requests
+
+url = "http://127.0.0.1:30000/generate"
+payload = {
+    "text": "Reply with one short word:",
+    "sampling_params": {"temperature": 0, "max_new_tokens": 4},
+    "return_logprob": True,
+    "top_logprobs_num": 20,
+    "return_text_in_logprobs": False,
+}
+response = requests.post(url, json=payload, timeout=120)
+response.raise_for_status()
+data = response.json()
+meta = data["meta_info"]
+
+chosen_ids = [row[1] for row in meta["output_token_logprobs"]]
+assert data["output_ids"][-meta["completion_tokens"]:] == chosen_ids
+assert len(chosen_ids) == meta["completion_tokens"]
+assert len(meta["output_top_logprobs"]) == len(chosen_ids)
+assert all(len(row) == 20 for row in meta["output_top_logprobs"])
+assert all(candidate[1] >= 0 for row in meta["output_top_logprobs"]
+           for candidate in row)
+print({
+    "text": data["text"],
+    "output_ids": data["output_ids"],
+    "topk_shape": [len(chosen_ids), 20],
+})
+PY
+```
+
+If this fails because `output_top_logprobs` is absent or has fewer than 20
+entries per token, do not run synthesis. Some SGLang builds have silently
+ignored `top_logprobs_num`.
+
+### Configure the Cartridges client
+
+```python
+from cartridges.clients.sglang import SGLangClient
+
+qwen = SGLangClient.Config(
+    model_name="Qwen/Qwen3.6-35B-A3B-FP8",
+    url="http://127.0.0.1:30000",
+    thinking_mode="toggleable",
+    thinking_template_key="enable_thinking",
+)
+
+glm = SGLangClient.Config(
+    model_name="zai-org/GLM-4.6-FP8",
+    url="http://127.0.0.1:30000",
+    trust_remote_code=True,
+    thinking_mode="toggleable",
+    thinking_template_key="enable_thinking",
+)
+
+kimi_thinking = SGLangClient.Config(
+    model_name="moonshotai/Kimi-K2-Thinking",
+    url="http://127.0.0.1:30000",
+    trust_remote_code=True,
+    thinking_mode="always",
+)
+```
+
+For a Kimi instruct checkpoint, use `thinking_mode="unsupported"`. Older GLM
+templates may expose the inverse `add_nothink_token` switch. For those
+checkpoints, supply a `custom_chat_template` that exposes a positive
+`enable_thinking` variable; the client intentionally does not infer or invert
+behavior from the model name.
+
+The server-reported tokenizer is loaded locally to render chats. Teacher and
+student can have different architectures, but token-level distillation is valid
+only when their token IDs have identical semantics—normally the exact same
+tokenizer and vocabulary.
 
 ## GPU selection rules
 

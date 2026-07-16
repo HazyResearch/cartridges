@@ -83,7 +83,7 @@ class FlatTopLogprobs:
     # ──────────────────────────────────────────────────────────
     def reconstruct(self) -> "TopLogprobs":
         T, K = self.shape
-        dense_logp = np.full((T, K), -1000.0, dtype=self.logprobs.dtype)
+        dense_logp = np.full((T, K), -np.inf, dtype=self.logprobs.dtype)
         dense_ids  = np.full((T, K), -1,      dtype=self.token_id.dtype)
 
         # The kept entries for each row always occupy the first *n*
@@ -127,8 +127,11 @@ class TopLogprobs:
         probs      = np.exp(self.logprobs)                 # [T , K]
         cum_mass   = np.cumsum(probs, axis=1)              # [T , K]
 
-        # 2. per-row cut-off index (inclusive)
-        cut_idx    = (cum_mass >= threshold).argmax(axis=1)   # [T]
+        # 2. per-row cut-off index (inclusive). If the returned top-k mass
+        # never reaches the threshold, retain all K entries.
+        reaches_threshold = cum_mass >= threshold
+        cut_idx = reaches_threshold.argmax(axis=1)
+        cut_idx = np.where(reaches_threshold.any(axis=1), cut_idx, K - 1)
 
         # 3. build a boolean mask: keep columns 0 … cut_idx[row]
         mask       = np.arange(K) < (cut_idx[:, None] + 1)    # [T , K]

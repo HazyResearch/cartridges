@@ -151,6 +151,184 @@ def _base_convert_messages_to_element(
         token_counts=token_counts,
     )
 
+
+def _find_subsequence(
+    sequence: list[int],
+    subsequence: list[int],
+    start: int,
+) -> int:
+    if not subsequence:
+        raise ValueError("Chat-template marker tokenized to an empty sequence")
+    last_start = len(sequence) - len(subsequence)
+    for idx in range(start, last_start + 1):
+        if sequence[idx:idx + len(subsequence)] == subsequence:
+            return idx
+    raise ValueError("Could not locate a message marker in the rendered chat template")
+
+
+def _chat_template_ids(
+    tokenizer: PreTrainedTokenizerFast,
+    messages: list[dict[str, str]],
+) -> list[int]:
+    token_ids = tokenizer.apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=False,
+        chat_template=MODEL_TO_CHAT_TEMPLATE.get(tokenizer.name_or_path),
+    )
+    if hasattr(token_ids, "tolist"):
+        token_ids = token_ids.tolist()
+    if token_ids and isinstance(token_ids[0], list):
+        if len(token_ids) != 1:
+            raise ValueError("Expected one rendered chat-template sequence")
+        token_ids = token_ids[0]
+    return [int(token_id) for token_id in token_ids]
+
+
+def _max_prefix_overlap(left: list[int], right: list[int]) -> int:
+    for size in range(min(len(left), len(right)), 0, -1):
+        if left[-size:] == right[:size]:
+            return size
+    return 0
+
+
+def tokenizer_messages_to_element(
+    messages: List[Conversation.Message],
+    retokenize: bool = False,
+    tokenizer: PreTrainedTokenizerFast | None = None,
+) -> DatasetElement:
+    """Build an element from the tokenizer's chat template, without model token constants.
+
+    The generated assistant IDs are substituted into a marker-rendered template so
+    teacher IDs remain exact. A tokenizer-only round trip is checked first, making
+    unsupported templates fail instead of silently shifting training targets.
+    """
+    if tokenizer is None:
+        raise ValueError("A tokenizer is required for tokenizer-derived conversion")
+    if not messages:
+        raise ValueError("messages must not be empty")
+
+    marker_texts = [
+        f"<|cartridges_message_{idx}_7f39a2|>" for idx in range(len(messages))
+    ]
+    marker_messages = [
+        {"role": message.role, "content": marker}
+        for message, marker in zip(messages, marker_texts, strict=True)
+    ]
+    rendered_markers = _chat_template_ids(tokenizer, marker_messages)
+
+    chunks: list[list[int]] = []
+    cursor = 0
+    for marker in marker_texts:
+        marker_ids = tokenizer.encode(marker, add_special_tokens=False)
+        marker_start = _find_subsequence(rendered_markers, marker_ids, cursor)
+        chunks.append(rendered_markers[cursor:marker_start])
+        cursor = marker_start + len(marker_ids)
+    chunks.append(rendered_markers[cursor:])
+
+    retokenized_content = [
+        list(tokenizer.encode(message.content, add_special_tokens=False))
+        for message in messages
+    ]
+
+    def compose(
+        replacements: list[list[int]],
+        *,
+        remove_suffix_overlap: bool,
+    ) -> tuple[list[int], list[int]]:
+        output = list(chunks[0])
+        starts: list[int] = []
+        for idx, replacement in enumerate(replacements):
+            starts.append(len(output))
+            output.extend(replacement)
+            following = chunks[idx + 1]
+            if remove_suffix_overlap:
+                overlap = _max_prefix_overlap(replacement, following)
+                following = following[overlap:]
+            output.extend(following)
+        return output, starts
+
+    roundtrip_ids, _ = compose(
+        retokenized_content,
+        remove_suffix_overlap=False,
+    )
+    expected_ids = _chat_template_ids(
+        tokenizer,
+        [
+            {"role": message.role, "content": message.content}
+            for message in messages
+        ],
+    )
+    if roundtrip_ids != expected_ids:
+        raise ValueError(
+            "Tokenizer chat-template round-trip failed; content token boundaries "
+            "cannot be derived safely for this checkpoint"
+        )
+
+    replacements = []
+    for message, fallback_ids in zip(messages, retokenized_content, strict=True):
+        if retokenize or message.token_ids is None:
+            replacements.append(fallback_ids)
+        else:
+            replacements.append([int(token_id) for token_id in message.token_ids])
+
+    input_ids, content_starts = compose(
+        replacements,
+        remove_suffix_overlap=not retokenize,
+    )
+    topk_token_ids, topk_logprobs, topk_token_idxs = [], [], []
+    for message, content_start in zip(messages, content_starts, strict=True):
+        if message.top_logprobs is None:
+            continue
+        if message.token_ids is None:
+            raise ValueError("Top-logprob messages must include exact completion token IDs")
+        if len(message.token_ids) != message.top_logprobs.shape[0]:
+            raise ValueError(
+                "Top-logprob token rows do not align with the message token IDs"
+            )
+        topk_token_ids.append(np.asarray(message.top_logprobs.token_id))
+        topk_logprobs.append(np.asarray(message.top_logprobs.logprobs))
+        topk_token_idxs.append(
+            np.asarray(message.top_logprobs.token_idx, dtype=np.int64) + content_start
+        )
+
+    if topk_token_ids:
+        flat_token_ids = np.concatenate(topk_token_ids)
+        flat_logprobs = np.concatenate(topk_logprobs)
+        flat_token_idxs = np.concatenate(topk_token_idxs)
+    else:
+        flat_token_ids = np.empty(0, dtype=np.int64)
+        flat_logprobs = np.empty(0, dtype=np.float32)
+        flat_token_idxs = np.empty(0, dtype=np.int64)
+
+    token_counts = TokenCounts(
+        num_system_and_user_tokens=sum(
+            len(ids)
+            for message, ids in zip(messages, replacements, strict=True)
+            if message.role != "assistant"
+        ),
+        num_assistant_tokens=sum(
+            len(ids)
+            for message, ids in zip(messages, replacements, strict=True)
+            if message.role == "assistant"
+        ),
+    )
+    return DatasetElement(
+        input_ids=torch.tensor(input_ids, dtype=torch.long),
+        topk_token_ids=torch.from_numpy(flat_token_ids),
+        topk_logprobs=torch.from_numpy(flat_logprobs),
+        topk_token_idxs=torch.from_numpy(flat_token_idxs),
+        metadata=[],
+        token_counts=token_counts,
+    )
+
+
+# Family-named entry points remain useful in configs/tests, while all boundaries
+# are derived from each checkpoint's tokenizer rather than model-name constants.
+glm_messages_to_element = tokenizer_messages_to_element
+kimi_messages_to_element = tokenizer_messages_to_element
+
+
 def qwen_messages_to_element(
     messages: List[Conversation.Message],
     retokenize: bool = False,
@@ -220,6 +398,15 @@ MODEL_TO_MESSAGE_CONVERTER = {
     "meta-llama/Llama-3.1-8B-Instruct": llama3_messages_to_element,
     "meta-llama/Llama-3.2-3B-Instruct": llama3_messages_to_element,
     "meta-llama/Llama-3.2-1B-Instruct": llama3_messages_to_element,
+    "zai-org/GLM-4.5": glm_messages_to_element,
+    "zai-org/GLM-4.5-Air": glm_messages_to_element,
+    "zai-org/GLM-4.5-FP8": glm_messages_to_element,
+    "zai-org/GLM-4.6": glm_messages_to_element,
+    "zai-org/GLM-4.6-FP8": glm_messages_to_element,
+    "zai-org/GLM-4.7": glm_messages_to_element,
+    "moonshotai/Kimi-K2-Instruct": kimi_messages_to_element,
+    "moonshotai/Kimi-K2-Instruct-0905": kimi_messages_to_element,
+    "moonshotai/Kimi-K2-Thinking": kimi_messages_to_element,
 }
 MODEL_TO_MESSAGE_CONVERTER = {k.lower(): v for k, v in MODEL_TO_MESSAGE_CONVERTER.items()}
 
@@ -322,7 +509,11 @@ class TrainDataset(Dataset):
 
         elements = []
         for row in data:
-            elements.append(MODEL_TO_MESSAGE_CONVERTER[self.tokenizer.name_or_path.lower()](
+            converter = MODEL_TO_MESSAGE_CONVERTER.get(
+                self.tokenizer.name_or_path.lower(),
+                tokenizer_messages_to_element,
+            )
+            elements.append(converter(
                 row.messages,
                 retokenize=self.config.targets == "tokens",
                 tokenizer=self.tokenizer,
@@ -502,7 +693,11 @@ class LossEvalDataset(TrainDataset):
             else:
                 messages = row.messages
 
-            elements.append(MODEL_TO_MESSAGE_CONVERTER[self.tokenizer.name_or_path.lower()](
+            converter = MODEL_TO_MESSAGE_CONVERTER.get(
+                self.tokenizer.name_or_path.lower(),
+                tokenizer_messages_to_element,
+            )
+            elements.append(converter(
                 messages,
                 retokenize=self.config.targets == "tokens",
                 tokenizer=self.tokenizer,

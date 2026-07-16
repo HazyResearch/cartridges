@@ -243,8 +243,48 @@ from cartridges.clients.sglang import SGLangClient
 client_config = SGLangClient.Config(
     model_name="Qwen/Qwen3-4b",
     url="http://localhost:8000",
+    thinking_mode="toggleable",
+    thinking_template_key="enable_thinking",
 )
 ```
+
+The client uses SGLang's native batched `/generate` endpoint, not its
+OpenAI-compatible endpoint. This is required for exact generated token IDs and
+the `[completion_tokens, top_logprobs]` token-ID/logprob matrices used by
+self-study. At startup it checks `/get_model_info` and makes a one-token
+`top_logprobs_num=20` request so an incompatible server fails before synthesis.
+
+Configure thinking behavior from the deployed checkpoint's capabilities rather
+than its architecture name:
+
+```python
+# GLM-4.5/4.6 hybrid checkpoints
+glm_client = SGLangClient.Config(
+    model_name="zai-org/GLM-4.6-FP8",
+    url="http://localhost:30000",
+    trust_remote_code=True,
+    thinking_mode="toggleable",
+    thinking_template_key="enable_thinking",
+)
+
+# Kimi K2 Thinking cannot disable reasoning in its chat template.
+kimi_client = SGLangClient.Config(
+    model_name="moonshotai/Kimi-K2-Thinking",
+    url="http://localhost:30000",
+    trust_remote_code=True,
+    thinking_mode="always",
+)
+```
+
+Named Hugging Face templates can be selected with `chat_template`; use
+`custom_chat_template` for an explicit Jinja template override. Extra template
+arguments belong in `chat_template_kwargs`.
+
+> **Token-vocabulary requirement:** Teacher and student may use different model
+> architectures only when every token ID has identical semantics, normally
+> because both use the exact same tokenizer and vocabulary. Similar
+> architectures or similarly named tokenizers are not sufficient for
+> token-level distillation.
 </details>
 
 

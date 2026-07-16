@@ -140,4 +140,11 @@ MODELS_WITH_THINKING = {
     "Qwen/Qwen3-8b",
     "Qwen/Qwen3-14b",
     "Qwen/Qwen3-32b",
+    "Qwen/Qwen3.6-35B-A3B-FP8",
+    "zai-org/GLM-4.5",
+    "zai-org/GLM-4.5-Air",
+    "zai-org/GLM-4.5-FP8",
+    "zai-org/GLM-4.6",
+    "zai-org/GLM-4.6-FP8",
+    "zai-org/GLM-4.7",
 }

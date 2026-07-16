@@ -14,6 +14,15 @@ MODEL_TO_THINKING_OVERRIDES = {
     "qwen/qwen3-1.7b": lambda enable_thinking: dict(enable_thinking=enable_thinking),
     "qwen/qwen3-4b": lambda enable_thinking: dict(enable_thinking=enable_thinking),
     "qwen/qwen3-8b": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "qwen/qwen3-14b": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "qwen/qwen3-32b": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "qwen/qwen3.6-35b-a3b-fp8": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "zai-org/glm-4.5": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "zai-org/glm-4.5-air": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "zai-org/glm-4.5-fp8": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "zai-org/glm-4.6": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "zai-org/glm-4.6-fp8": lambda enable_thinking: dict(enable_thinking=enable_thinking),
+    "zai-org/glm-4.7": lambda enable_thinking: dict(enable_thinking=enable_thinking),
 }
 
 DEFAULT_COT = "Think before responding. Put your chain of thought/scratchpad between the <think> and </think> tags before providing your final response."
