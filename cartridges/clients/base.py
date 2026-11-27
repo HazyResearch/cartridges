@@ -127,8 +127,11 @@ class TopLogprobs:
         probs      = np.exp(self.logprobs)                 # [T , K]
         cum_mass   = np.cumsum(probs, axis=1)              # [T , K]
 
-        # 2. per-row cut-off index (inclusive)
-        cut_idx    = (cum_mass >= threshold).argmax(axis=1)   # [T]
+        # 2. per-row cut-off index (inclusive); rows whose top-K mass never
+        #    reaches `threshold` keep all K columns (argmax of an all-False
+        #    row is 0, which would keep only the top-1 entry)
+        reached    = cum_mass >= threshold                     # [T , K]
+        cut_idx    = np.where(reached.any(axis=1), reached.argmax(axis=1), K - 1)  # [T]
 
         # 3. build a boolean mask: keep columns 0 … cut_idx[row]
         mask       = np.arange(K) < (cut_idx[:, None] + 1)    # [T , K]
