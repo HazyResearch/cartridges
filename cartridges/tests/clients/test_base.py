@@ -121,6 +121,22 @@ class TestTopLogprobsFlattenReconstruct:
         # Higher thresholds should keep more data
         assert len(flat_50.logprobs) <= len(flat_90.logprobs) <= len(flat_99.logprobs)
 
+    def test_flatten_keeps_all_entries_when_threshold_not_reached(self):
+        """Rows whose top-K mass is below the threshold keep every entry, not just the top-1."""
+        logprobs = np.log(np.array([
+            [0.6, 0.2, 0.1],     # cumsum 0.6, 0.8, 0.9: never reaches 0.99
+            [0.98, 0.015, 0.005],  # cumsum reaches 0.99 at index 1
+        ]))
+        token_ids = np.array([
+            [1, 2, 3],
+            [4, 5, 6],
+        ])
+
+        flat = TopLogprobs(logprobs=logprobs, token_ids=token_ids).flatten(threshold=0.99)
+
+        np.testing.assert_array_equal(flat.token_idx, [0, 0, 0, 1, 1])
+        np.testing.assert_array_equal(flat.token_id, [1, 2, 3, 4, 5])
+
     def test_flatten_validation_errors(self):
         """Test that flatten raises appropriate validation errors."""
         logprobs = np.array([[-0.1, -0.5], [-0.2, -0.3]])
